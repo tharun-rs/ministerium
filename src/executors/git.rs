@@ -4,11 +4,11 @@ use tokio::process::Command;
 
 use crate::utils::git_utils::git_repos_root_folder;
 
-pub async fn clone(repo_url: &String) -> Result<(), String> {
-    let repo_root = git_repos_root_folder();
+pub async fn clone(repo_url: &String, repo_name: &String) -> Result<(), String> {
+    let repo_path = format!("{}/{}",git_repos_root_folder(), repo_name);
 
     let output = Command::new("git")
-        .args(["clone", repo_url, &repo_root])
+        .args(["clone", repo_url, &repo_path])
         .output()
         .await
         .map_err(|e| format!("failed to spawn git clone: {}", e))?;
