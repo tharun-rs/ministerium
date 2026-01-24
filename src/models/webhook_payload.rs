@@ -20,7 +20,6 @@ pub enum PullRequestAction {
 
 // Root model
 #[derive(serde::Deserialize, Debug)]
-#[allow(dead_code)] // Remove after implementing all variables
 pub struct WebhookPayload {
     #[serde(rename = "ref")]
     pub(crate) git_ref: Option<String>,
@@ -36,7 +35,6 @@ pub struct WebhookPayload {
 
 
 #[derive(serde::Deserialize, Debug)]
-#[allow(dead_code)] // Remove after implementing all variables
 pub(crate) struct Repository {
     pub(crate) name: String,
     pub(crate) full_name: String,
@@ -46,21 +44,18 @@ pub(crate) struct Repository {
 }
 
 #[derive(serde::Deserialize, Debug)]
-#[allow(dead_code)] // Remove after implementing all variables
 struct Organization {
     pub(crate) login: String,
     pub(crate) id: u32,
 }
 
 #[derive(serde::Deserialize, Debug)]
-#[allow(dead_code)] // Remove after implementing all variables
 struct Pusher {
     name: String,
     email: String,
 }
 
 #[derive(serde::Deserialize, Debug)]
-#[allow(dead_code)] // Remove after implementing all variables
 struct PullRequest {
     url: String,
     id: u32,
