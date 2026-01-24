@@ -1,7 +1,7 @@
 use crate::{
     executors::{
         docker::{build, run},
-        git::{clone, pull}, nginx::reload_nginx_if_needed,
+        git::{clone, pull}, nginx::expose_app,
     },
     models::webhook_payload::WebhookPayload,
     utils::git_utils::repo_exist,
@@ -31,7 +31,7 @@ pub async fn process(payload: WebhookPayload) -> Result<(), String> {
         println!("Docker running started on port {}",port);
 
         // 4. Expose on nginx if not configured already
-        reload_nginx_if_needed(git_repo_name, port).await?;
+        expose_app(git_repo_name, port).await?;
         print!("Processing completed");
     }
     Ok(())
