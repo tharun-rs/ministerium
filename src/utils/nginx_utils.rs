@@ -26,8 +26,8 @@ pub fn nginx_config_exists(repo_name: &str) -> bool {
 }
 
 pub async fn reload_nginx() -> Result<(), String> {
-    let test = Command::new("nginx")
-        .arg("-t")
+    let test = Command::new("sudo")
+        .args(["nginx","-t"])
         .output()
         .await
         .map_err(|e| format!("failed to test nginx config: {}", e))?;
@@ -36,8 +36,8 @@ pub async fn reload_nginx() -> Result<(), String> {
         return Err(String::from_utf8_lossy(&test.stderr).to_string());
     }
 
-    let reload = Command::new("nginx")
-        .args(["-s", "reload"])
+    let reload = Command::new("sudo")
+        .args(["nginx","-s", "reload"])
         .output()
         .await
         .map_err(|e| format!("failed to reload nginx: {}", e))?;
