@@ -9,10 +9,14 @@ use crate::utils::{
 pub async fn build(repo_name: &str) -> Result<(), String> {
     let repo_root = git_repos_root_folder();
     let repo_folder = Path::new(&repo_root).join(repo_name);
+    let image_tag = format!("{}:latest", repo_name);
+
 
     let output = Command::new("docker")
         .args([
             "build",
+            "-t",
+            &image_tag,
             repo_folder.to_str().ok_or("invalid repo path")?,
         ])
         .output()
