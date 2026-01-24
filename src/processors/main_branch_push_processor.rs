@@ -15,7 +15,7 @@ pub async fn process(payload: WebhookPayload) -> Result<(), String> {
 
         // 1. Pull/clone repo
         if !repo_exist(git_repo_name) {
-            clone(git_repo_ssh_url).await?;
+            clone(git_repo_ssh_url, git_repo_name).await?;
             println!("Repo cloned successfully");
         } else {
             pull(git_repo_name).await?;
