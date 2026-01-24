@@ -28,7 +28,7 @@ pub async fn process(payload: WebhookPayload) -> Result<(), String> {
 
         // 3. Start docker
         let port = run(git_repo_name).await?;
-        print!("Docker running started on port {}",port);
+        println!("Docker running started on port {}",port);
 
         // 4. Expose on nginx if not configured already
         reload_nginx_if_needed(git_repo_name, port).await?;

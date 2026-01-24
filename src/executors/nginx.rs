@@ -1,4 +1,4 @@
-use crate::utils::nginx_utils::{generate_nginx_config, nginx_config_exists, reload_nginx};
+use crate::utils::nginx_utils::{generate_nginx_config, reload_nginx};
 use tokio::fs;
 
 pub async fn reload_nginx_if_needed(repo_name: &str, port: u16) -> Result<(), String> {

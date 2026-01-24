@@ -1,10 +1,14 @@
+use std::env;
 use std::path::Path;
 use tokio::process::Command;
 
 pub fn generate_nginx_config(repo_name: &str, port: u16) -> String {
+    let server_name = env::var("APPS_SERVER_ADDR").unwrap_or_else(|_| "localhost".to_string());
+
     format!(
-r#"server {{
+        r#"server {{
     listen 80;
+    server_name {server_name};
 
     location /{repo}/ {{
         proxy_pass http://127.0.0.1:{port}/;
@@ -13,16 +17,10 @@ r#"server {{
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }}
 }}"#,
+        server_name = server_name,
         repo = repo_name,
         port = port
     )
-}
-
-pub fn nginx_config_exists(repo_name: &str) -> bool {
-    let path_str = format!("/etc/nginx/conf.d/ministerium/{}.conf", repo_name);
-    let nginx_file = Path::new(&path_str);
-
-    nginx_file.exists() && nginx_file.is_file()
 }
 
 pub async fn reload_nginx() -> Result<(), String> {
