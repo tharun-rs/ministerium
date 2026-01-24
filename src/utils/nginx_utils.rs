@@ -19,7 +19,7 @@ r#"server {{
 }
 
 pub fn nginx_config_exists(repo_name: &str) -> bool {
-    let path_str = format!("/etc/nginx/conf.d/{}.conf", repo_name);
+    let path_str = format!("/etc/nginx/conf.d/ministerium/{}.conf", repo_name);
     let nginx_file = Path::new(&path_str);
 
     nginx_file.exists() && nginx_file.is_file()
