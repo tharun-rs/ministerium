@@ -1,0 +1,31 @@
+[Unit]
+Description=Ministerium GitHub Runner
+After=network.target docker.service nginx.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User={{MINISTERIUM_USER}}
+Group={{MINISTERIUM_GROUP}}
+WorkingDirectory=/opt/ministerium
+ExecStart=/opt/ministerium/ministerium
+Restart=always
+RestartSec=5
+
+# Do not put secrets in this unit. Create this file with mode 0600 instead.
+EnvironmentFile=/etc/ministerium/ministerium.env
+# Docker Buildx needs a writable configuration directory outside the protected home.
+Environment=DOCKER_CONFIG=/var/lib/ministerium/docker
+
+# Ministerium needs sudo for the narrowly-scoped nginx commands in
+# deploy/sudoers/ministerium. Keep this false until nginx reloading is moved
+# out of the application process.
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/lib/ministerium/repos /var/lib/ministerium/docker /etc/nginx/conf.d/ministerium
+ReadOnlyPaths={{MINISTERIUM_HOME}}/.ssh
+
+[Install]
+WantedBy=multi-user.target

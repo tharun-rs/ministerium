@@ -1,0 +1,16 @@
+[Unit]
+Description=cloudflared
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+TimeoutStartSec=15
+Type=notify
+# Store the remotely-managed tunnel token in /etc/cloudflared/tunnel.token
+# with owner root:root and mode 0600. cloudflared 2025.4.0 or later is required.
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file /etc/cloudflared/tunnel.token
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+# Replace {{MINISTERIUM_USER}} before installing with visudo.
+# Ministerium uses these commands to validate and reload generated routes.
+{{MINISTERIUM_USER}} ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -s reload

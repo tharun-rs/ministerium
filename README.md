@@ -1,272 +1,240 @@
-# Ministerium – GitHub Webhook → Docker → NGINX Runner
+# Ministerium
 
-Ministerium is a lightweight self-hosted runner that:
-1. Receives GitHub webhooks
-2. Clones or updates a repository
-3. Builds it using Docker
-4. Runs the container on a dynamic port
-5. Exposes it via NGINX using path-based routing
+Ministerium is a self-hosted deployment runner. A signed GitHub `push` webhook
+for a repository's `main` branch causes it to clone or pull that repository,
+build its Docker image, run it with a dynamic host port, and expose it at
+`/<repository-name>/` through NGINX.
 
-This document covers **all system-level setup** required **outside Rust code**.
+For example, `demo-repository` is served at:
 
----
+```text
+https://apps.example.com/demo-repository/
+```
 
-## System Requirements
+## What belongs in Git
 
-- Linux (tested on Ubuntu/Debian)
-- Docker
-- NGINX
-- Git
-- Rust (stable, edition 2024)
-- `sudo` access (one-time setup)
+The templates in [`deploy/`](deploy/) are safe to commit and are the source
+of truth for a new server:
 
----
+- systemd service templates for Ministerium and Cloudflare Tunnel;
+- the NGINX base server configuration;
+- the least-privilege sudoers rule;
+- an environment-file template.
 
-## 1. Install Required Packages
+Do **not** commit real environment files, webhook secrets, Cloudflare Tunnel
+tokens, SSH private keys, generated `locations/*.conf` files, cloned apps, or
+Docker state.
+
+## Requirements
+
+- A Debian/Ubuntu host with a public ingress. Cloudflare Tunnel is supported.
+- A dedicated Linux account that can read a GitHub deploy key and use Docker.
+- Rust stable, Docker, NGINX, Git, and `sudo`.
+- A GitHub repository SSH key or machine account with read access to every app
+  Ministerium should deploy.
+
+Each deployed application must have a `Dockerfile` and must listen on container
+port **8080**. Ministerium currently deploys only signed `push` events for
+`main`.
+
+## New machine setup
+
+The commands below use `rst` as the service account. Replace it consistently if
+you use another account.
+
+### 1. Install host dependencies
 
 ```bash
 sudo apt update
-sudo apt install -y \
-    docker.io \
-    nginx \
-    git \
-    curl \
-    build-essential
-2. Docker Setup (IMPORTANT)
-Add your user to the Docker group
-bash
-Copy code
-sudo usermod -aG docker $USER
-Then log out and log back in (or reboot).
+sudo apt install -y build-essential ca-certificates curl docker.io git nginx
 
-Verify:
+sudo usermod -aG docker rst
+```
 
-bash
-Copy code
-docker ps
-This must work without sudo.
+Log out and back in as `rst` so Docker group membership applies. Then install
+Rust as that user:
 
-3. Rust Toolchain
-Install Rust using rustup (recommended):
-
-bash
-Copy code
-curl https://sh.rustup.rs -sSf | sh
-Restart your shell, then verify:
-
-bash
-Copy code
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
 rustc --version
-cargo --version
-4. Directory Layout Required by Ministerium
-Ministerium assumes the following directories exist:
-
-Git repositories root
-bash
-Copy code
-mkdir -p ~/repos
-Set environment variable:
-
-bash
-Copy code
-export GITHUB_ROOT_FOLDER="$HOME/repos"
-(Optional: add this to ~/.bashrc)
-
-5. NGINX Configuration (CRITICAL)
-5.1 Disable Debian default site
-Ministerium uses its own default server.
-
-bash
-Copy code
-sudo mv /etc/nginx/sites-enabled/default \
-        /etc/nginx/sites-enabled/default.disabled
-5.2 Create Ministerium NGINX directories
-bash
-Copy code
-sudo mkdir -p /etc/nginx/conf.d/ministerium/locations
-sudo chown -R $USER:$USER /etc/nginx/conf.d/ministerium
-5.3 Create the main NGINX server config
-Create:
-
-bash
-Copy code
-nano /etc/nginx/conf.d/ministerium/server.conf
-Paste exactly this:
-
-nginx
-Copy code
-server {
-    listen 80 default_server;
-    server_name _;
-
-    include /etc/nginx/conf.d/ministerium/locations/*.conf;
-}
-Save and exit.
-
-5.4 Verify NGINX includes recursive configs
-Ensure /etc/nginx/nginx.conf contains:
-
-nginx
-Copy code
-include /etc/nginx/conf.d/**/*.conf;
-(This is present by default on modern Debian/Ubuntu.)
-
-6. Allow Ministerium to Reload NGINX (SUDOERS)
-Ministerium runs as a normal user but needs to reload NGINX.
-
-Edit sudoers:
-
-bash
-Copy code
-sudo visudo
-Add this exact line (replace rst with your username):
-
-ruby
-Copy code
-rst ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -s reload
-Verify nginx path:
-
-bash
-Copy code
-which nginx
-7. Restart NGINX
-bash
-Copy code
-sudo nginx -t
-sudo systemctl restart nginx
-Verify:
-
-bash
-Copy code
-curl http://localhost
-You may see a 404 — that’s expected until apps are deployed.
-
-8. Docker Image Expectations
-Repositories handled by Ministerium must:
-
-Contain a Dockerfile
-
-Expose and listen on port 8080 inside the container
-
-Example (NGINX-based app):
-
-dockerfile
-Copy code
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY index.html /usr/share/nginx/html/index.html
-EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
-Ministerium runs containers using:
-
-bash
-Copy code
-docker run -d -p 0:8080 <image>
-9. GitHub Webhook Setup
-In your GitHub repository:
-
-Go to Settings → Webhooks
-
-Payload URL:
-
-perl
-Copy code
-http://<your-server>/github/webhook
-Content type: application/json
-
-Set a secret
-
-Select events:
-
-Push
-
-Pull request (optional)
-
-The secret is validated using X-Hub-Signature-256.
-
-10. Running Ministerium
-From the project root:
-
-bash
-Copy code
-cargo run
-Expected behavior:
-
-Webhook received
-
-Repo cloned or pulled
-
-Docker image built
-
-Container restarted
-
-NGINX route created:
-
-perl
-Copy code
-http://<host>/<repo-name>/
-11. Verifying a Deployment
-Check container:
-
-bash
-Copy code
 docker ps
-Check NGINX routing:
+```
 
-bash
-Copy code
-ls /etc/nginx/conf.d/ministerium/locations
-Test:
+### 2. Give the service account GitHub access
 
-bash
-Copy code
-curl http://localhost/<repo-name>/
-12. Architecture Summary
-One NGINX process
+Create a dedicated deploy key (or use a restricted machine account), add its
+public key to the GitHub organization/repositories as read-only, then trust
+GitHub's host key:
 
-One default server
+```bash
+sudo -u rst mkdir -p /home/rst/.ssh
+sudo -u rst chmod 700 /home/rst/.ssh
+sudo -u rst ssh-keygen -t ed25519 -f /home/rst/.ssh/ministerium_deploy -C ministerium
+sudo -u rst sh -c 'ssh-keyscan github.com >> /home/rst/.ssh/known_hosts'
+```
 
-One location file per app
+Configure SSH to use that key in `/home/rst/.ssh/config`:
 
-One Docker container per app
+```sshconfig
+Host github.com
+    IdentityFile ~/.ssh/ministerium_deploy
+    IdentitiesOnly yes
+```
 
-Path-based routing (Cloudflare Tunnel safe)
+Verify it with a repository Ministerium may deploy:
 
-Notes
-Do NOT run cargo with sudo
+```bash
+sudo -u rst git ls-remote git@github.com:YOUR_ORG/YOUR_APP.git HEAD
+```
 
-Do NOT manually edit locations/*.conf
+### 3. Clone and build Ministerium
 
-NGINX state is filesystem-driven
+```bash
+sudo install -d -o rst -g rst /opt/ministerium
+sudo install -d -o rst -g rst /var/lib/ministerium/repos /var/lib/ministerium/docker
+sudo -u rst git clone https://github.com/YOUR_ORG/ministerium.git /opt/ministerium
+sudo -u rst /bin/bash -lc 'source "$HOME/.cargo/env" && cd /opt/ministerium && cargo build --release'
+sudo install -o rst -g rst -m 0755 /opt/ministerium/target/release/ministerium /opt/ministerium/ministerium
+```
 
-Containers are restarted on every deploy
+If the repository is private, clone using an authenticated SSH URL instead.
 
-Troubleshooting
-Check NGINX config:
-bash
-Copy code
-sudo nginx -T
-Check logs:
-bash
-Copy code
-sudo tail -f /var/log/nginx/error.log
-Check container port:
-bash
-Copy code
-docker port <container-name>
-License
-MIT (or your choice)
+### 4. Create the protected environment file
 
-markdown
-Copy code
+```bash
+sudo install -d -m 0755 /etc/ministerium
+sudo install -m 0600 /dev/null /etc/ministerium/ministerium.env
+sudo nano /etc/ministerium/ministerium.env
+```
 
----
+Copy the keys from
+[`deploy/environment/ministerium.env.example`](deploy/environment/ministerium.env.example),
+set a long random webhook secret, and keep the file owned by `root`. Its
+repository root should be:
 
-If you want, next I can:
-- Add **diagram section** (ASCII or Mermaid)
-- Write **developer README vs operator README**
-- Add **uninstall / cleanup steps**
-- Add **Cloudflare Tunnel specific notes**
-- Add **security hardening section**
+```dotenv
+GITHUB_ROOT_FOLDER=/var/lib/ministerium/repos
+```
 
-Just tell me.
+### 5. Install NGINX configuration and permissions
+
+```bash
+sudo install -d -o rst -g rst /etc/nginx/conf.d/ministerium/locations
+sudo install -m 0644 deploy/nginx/ministerium-server.conf /etc/nginx/conf.d/ministerium/server.conf
+sudo mv /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.disabled
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Install the sudoers rule safely. Replace `{{MINISTERIUM_USER}}` in a temporary
+copy with `rst`, then validate and install it with `visudo`:
+
+```bash
+sed 's/{{MINISTERIUM_USER}}/rst/g' deploy/sudoers/ministerium | sudo visudo -cf -
+sed 's/{{MINISTERIUM_USER}}/rst/g' deploy/sudoers/ministerium | sudo tee /etc/sudoers.d/ministerium >/dev/null
+sudo chmod 0440 /etc/sudoers.d/ministerium
+sudo visudo -cf /etc/sudoers.d/ministerium
+```
+
+### 6. Install and start the systemd service
+
+Replace the three placeholders in a local copy of
+[`deploy/systemd/ministerium.service.template`](deploy/systemd/ministerium.service.template):
+
+- `{{MINISTERIUM_USER}}` and `{{MINISTERIUM_GROUP}}` → `rst`;
+- `{{MINISTERIUM_HOME}}` → `/home/rst`.
+
+Then install and start it:
+
+```bash
+sudo cp deploy/systemd/ministerium.service.template /etc/systemd/system/ministerium.service
+sudo nano /etc/systemd/system/ministerium.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ministerium
+curl -i http://127.0.0.1:8013/heartbeat
+```
+
+Expected response: `HTTP/1.1 200 OK` with body `OK`.
+
+### 7. Expose the server through Cloudflare Tunnel (optional)
+
+Create a remotely-managed tunnel and add public hostname routes in Cloudflare:
+
+- `apps.example.com` → `http://localhost:80`
+- `ministerium.example.com` → `http://localhost:8013`
+
+Store the tunnel token outside the unit file:
+
+```bash
+sudo install -d -m 0700 /etc/cloudflared
+sudo nano /etc/cloudflared/tunnel.token
+sudo chown root:root /etc/cloudflared/tunnel.token
+sudo chmod 0600 /etc/cloudflared/tunnel.token
+```
+
+Install
+[`deploy/systemd/cloudflared.service.template`](deploy/systemd/cloudflared.service.template)
+as `/etc/systemd/system/cloudflared.service`, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now cloudflared
+sudo systemctl status cloudflared --no-pager
+```
+
+Do not paste a tunnel token into a committed file or a systemd `ExecStart` line.
+
+### 8. Configure an application webhook
+
+In each application repository, go to **Settings → Webhooks → Add webhook**:
+
+- Payload URL: `https://ministerium.example.com/github/webhook`
+- Content type: `application/json`
+- Secret: the exact `GITHUB_WEBHOOK_SECRET` from the server
+- Events: **Just the push event**
+
+Push to `main`. Ministerium responds immediately to GitHub, then deploys in the
+background.
+
+## Verify a deployment
+
+For a repository named `my-app`:
+
+```bash
+ssh rst@YOUR_SERVER
+journalctl -u ministerium -n 100 --no-pager
+docker ps --filter 'name=^my-app$'
+curl -i http://127.0.0.1/my-app/
+```
+
+When using Cloudflare with `apps.example.com → http://localhost:80`, the public
+URL is:
+
+```text
+https://apps.example.com/my-app/
+```
+
+## Updating Ministerium
+
+Run [`update-server.sh`](update-server.sh) from a checked-out copy of this
+repository on the server. It only accepts fast-forward Git updates, rebuilds the
+release binary, installs it, and restarts the service.
+
+Defaults match the setup above. Override them for a different installation:
+
+```bash
+MINISTERIUM_INSTALL_USER=deploy \
+MINISTERIUM_INSTALL_GROUP=deploy \
+MINISTERIUM_INSTALL_DIR=/opt/ministerium \
+./update-server.sh
+```
+
+## Operational notes
+
+- Ministerium has no deployment health check or rollback yet. Watch the
+  `ministerium` journal while adding new apps.
+- Routes in `/etc/nginx/conf.d/ministerium/locations/` are generated state;
+  do not edit them manually.
+- The service currently needs narrowly-scoped passwordless `sudo` to validate
+  and reload NGINX. The supplied sudoers rule grants only those two commands.
