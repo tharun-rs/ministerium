@@ -42,6 +42,7 @@ pub async fn run(repo_name: &str) -> Result<u16, String> {
         .args([
             "run",
             "-d",
+            "--restart", "unless-stopped",
             "--name", repo_name,
             "-p", "0:8080",
             repo_name,
