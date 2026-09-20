@@ -115,6 +115,7 @@ repository root should be:
 
 ```dotenv
 GITHUB_ROOT_FOLDER=/var/lib/ministerium/repos
+DEPLOYMENTS_DB_PATH=/var/lib/ministerium/repos/ministerium.sqlite3
 ```
 
 ### 5. Install NGINX configuration and permissions
@@ -231,6 +232,31 @@ MINISTERIUM_INSTALL_DIR=/opt/ministerium \
 ```
 
 ## Operational notes
+
+## Monitoring API
+
+Ministerium maintains its deployment inventory in SQLite. By default, the database
+is `ministerium.sqlite3` inside `GITHUB_ROOT_FOLDER`; set `DEPLOYMENTS_DB_PATH`
+to store it elsewhere.
+
+- `GET /api/deployments` lists deployed applications.
+- `GET /api/deployments/{repository_name}` returns one application, or `404`.
+- `GET /api/deployments/{repository_name}/versions` lists its immutable image history.
+- `GET /api/metrics` reports live host uptime, load average, CPU core count,
+  memory, repository-filesystem usage, and Raspberry Pi CPU temperature when
+  available.
+- `POST /api/deployments/{repository_name}/restart` restarts an application.
+- `POST /api/deployments/{repository_name}/rollback` redeploys the previous
+  successfully deployed image; add `?image_tag=<tag>` to select a listed version.
+- `GET /openapi.json` serves the OpenAPI definition; browse it at `/swagger`.
+
+The deployment responses exclude repository SSH URLs. Put these monitoring
+endpoints behind your normal network or frontend authentication layer before
+exposing them publicly.
+
+Set `MINISTERIUM_API_TOKEN` to a long random value before using either control
+endpoint, then send `Authorization: Bearer <token>`. The OpenAPI page includes
+the GitHub webhook endpoint but does not expose its webhook secret.
 
 - Ministerium has no deployment health check or rollback yet. Watch the
   `ministerium` journal while adding new apps.

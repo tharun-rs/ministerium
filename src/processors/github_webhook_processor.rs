@@ -3,6 +3,7 @@ use axum::{
     http::HeaderMap
 };
 use crate::{
+    database::Database,
     models::webhook_payload::{
         Event,
         WebhookPayload
@@ -11,7 +12,7 @@ use crate::{
     utils::git_utils::extract_event
 };
 
-pub async fn process_webhook(body: Bytes, headers: HeaderMap) {
+pub async fn process_webhook(body: Bytes, headers: HeaderMap, database: Database) {
     // 1. Extract event type
     let event: Option<Event> = extract_event(&headers);
 
@@ -29,7 +30,7 @@ pub async fn process_webhook(body: Bytes, headers: HeaderMap) {
             if let Some(git_ref) = payload.git_ref.as_deref() {
                 // Only act on main branch
                 if git_ref == "refs/heads/main" {
-                    if let Err(err) = main_branch_push_processor::process(payload).await {
+                    if let Err(err) = main_branch_push_processor::process(payload, database).await {
                         eprintln!("Pipeline failed: {}",err);
                     };
                 }

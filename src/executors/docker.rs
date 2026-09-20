@@ -1,15 +1,24 @@
 use tokio::process::Command;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::utils::{
     git_utils::git_repos_root_folder,
     docker_utils::get_docker_port
 };
 
-pub async fn build(repo_name: &str) -> Result<(), String> {
+pub struct RunningContainer {
+    pub container_id: String,
+    pub host_port: u16,
+}
+
+pub async fn build(repo_name: &str) -> Result<String, String> {
     let repo_root = git_repos_root_folder();
     let repo_folder = Path::new(&repo_root).join(repo_name);
-    let image_tag = format!("{}:latest", repo_name);
+    let version = SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("failed to create image version: {error}"))?
+        .as_millis();
+    let image_tag = format!("{}:deployment-{}", repo_name, version);
 
 
     let output = Command::new("docker")
@@ -30,10 +39,20 @@ pub async fn build(repo_name: &str) -> Result<(), String> {
         ));
     }
 
-    Ok(())
+    let latest = format!("{}:latest", repo_name);
+    let tag = Command::new("docker")
+        .args(["tag", &image_tag, &latest])
+        .output()
+        .await
+        .map_err(|error| format!("failed to tag docker image: {error}"))?;
+    if !tag.status.success() {
+        return Err(format!("docker tag failed:\n{}", String::from_utf8_lossy(&tag.stderr)));
+    }
+
+    Ok(image_tag)
 }
 
-pub async fn run(repo_name: &str) -> Result<u16, String> {
+pub async fn run(repo_name: &str, image_tag: &str) -> Result<RunningContainer, String> {
     // 0. Ensure old container is gone
     stop_and_remove_container(repo_name).await?;
 
@@ -44,8 +63,10 @@ pub async fn run(repo_name: &str) -> Result<u16, String> {
             "-d",
             "--restart", "unless-stopped",
             "--name", repo_name,
+            "--label", "ministerium.managed=true",
+            "--label", &format!("ministerium.repository={}", repo_name),
             "-p", "0:8080",
-            repo_name,
+            image_tag,
         ])
         .output()
         .await
@@ -63,7 +84,17 @@ pub async fn run(repo_name: &str) -> Result<u16, String> {
         .to_string();
 
     // 2. Ask Docker which port was assigned
-    get_docker_port(&container_id).await
+    let host_port = get_docker_port(&container_id).await?;
+    Ok(RunningContainer { container_id, host_port })
+}
+
+pub async fn restart(container_name: &str) -> Result<(), String> {
+    let output = Command::new("docker").args(["restart", container_name]).output().await
+        .map_err(|error| format!("failed to restart container: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("docker restart failed:\n{}", String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok(())
 }
 
 
