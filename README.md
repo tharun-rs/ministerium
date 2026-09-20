@@ -220,7 +220,8 @@ https://apps.example.com/my-app/
 
 Run [`update-server.sh`](update-server.sh) from a checked-out copy of this
 repository on the server. It only accepts fast-forward Git updates, rebuilds the
-release binary, installs it, and restarts the service.
+release binary, copies the checkout's `.env` to `/etc/ministerium/ministerium.env`,
+installs the binary, and restarts the service. The local `.env` is required.
 
 Defaults match the setup above. Override them for a different installation:
 
@@ -229,6 +230,41 @@ MINISTERIUM_INSTALL_USER=deploy \
 MINISTERIUM_INSTALL_GROUP=deploy \
 MINISTERIUM_INSTALL_DIR=/opt/ministerium \
 ./update-server.sh
+```
+
+### Create the API token
+
+The API token is created by the server administrator; Ministerium does not
+issue one. Generate a value, place it in `/etc/ministerium/ministerium.env`,
+and restart the service so systemd reloads the environment:
+
+```bash
+openssl rand -hex 32
+sudo nano /etc/ministerium/ministerium.env
+sudo systemctl restart ministerium
+```
+
+Set the generated value as `MINISTERIUM_API_TOKEN`. Keep it private. The
+restart endpoint requires it as `Authorization: Bearer <token>`.
+
+### Use the deployment dashboard
+
+Open `/ui` on the Ministerium server, for example:
+
+```text
+https://ministerium.example.com/ui
+```
+
+The dashboard lists deployments and lets you restart an application such as
+`rstharun`. Enter the `MINISTERIUM_API_TOKEN` in the token field before using
+the restart button. The token is kept only in the browser session and is sent
+only with restart requests.
+
+If port `8013` is not publicly routed, use an SSH tunnel and open
+`http://127.0.0.1:8013/ui` locally:
+
+```bash
+ssh -L 8013:127.0.0.1:8013 rst@YOUR_SERVER
 ```
 
 ## Operational notes

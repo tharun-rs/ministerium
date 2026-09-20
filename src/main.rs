@@ -34,6 +34,7 @@ async fn main() {
         .route("/api/metrics", get(monitoring_routes::metrics))
         .route("/openapi.json", get(documentation_routes::openapi))
         .route("/swagger", get(documentation_routes::swagger))
+        .route("/ui", get(documentation_routes::ui))
         .with_state(database);
 
     let listener = tokio::net::TcpListener::bind(server_addr).await.unwrap();
